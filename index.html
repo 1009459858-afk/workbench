@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚀 个人工作台 · 云端同步版</title>
+<style>
+:root{
+  --blue:#3b82f6;--blue-dark:#2563eb;--blue-light:#dbeafe;
+  --green:#10b981;--amber:#f59e0b;--red:#ef4444;
+  --ink:#1f2937;--ink-soft:#6b7280;--ink-light:#9ca3af;
+  --line:#e5e7eb;--bg:#f9fafb;--card:#fff;
+  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,textarea,select{font-family:inherit;font-size:14px;color:var(--ink)}
+
+/* ===== 登录页 ===== */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(135deg,#dbeafe 0%,#f9fafb 100%)}
+.auth-card{background:var(--card);border-radius:16px;box-shadow:0 10px 40px rgba(59,130,246,.15);padding:32px;width:100%;max-width:380px}
+.auth-card h1{font-size:22px;margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.auth-card p.sub{color:var(--ink-soft);font-size:13px;margin-bottom:24px}
+.auth-tabs{display:flex;gap:4px;background:var(--bg);padding:4px;border-radius:10px;margin-bottom:20px}
+.auth-tab{flex:1;padding:8px;border-radius:7px;font-size:13px;font-weight:500;color:var(--ink-soft);transition:all .15s}
+.auth-tab.active{background:#fff;color:var(--blue-dark);box-shadow:var(--shadow)}
+.auth-field{margin-bottom:14px}
+.auth-field label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;font-weight:500}
+.auth-field input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;outline:none;transition:border .15s}
+.auth-field input:focus{border-color:var(--blue)}
+.btn{padding:10px 16px;border-radius:8px;font-size:14px;font-weight:500;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:var(--blue-dark)}
+.btn-primary:disabled{opacity:.6;cursor:not-allowed}
+.btn-ghost{background:#fff;border:1px solid var(--line);color:var(--ink-soft);width:auto}
+.btn-ghost:hover{border-color:var(--blue);color:var(--blue)}
+.btn-danger{background:#fff;border:1px solid var(--red);color:var(--red);width:auto}
+.btn-danger:hover{background:var(--red);color:#fff}
+.auth-msg{font-size:12px;margin-top:12px;padding:8px 10px;border-radius:6px;display:none}
+.auth-msg.error{background:#fee2e2;color:var(--red);display:block}
+.auth-msg.success{background:#d1fae5;color:var(--green);display:block}
+
+/* ===== 主界面 ===== */
+.app{display:none;min-height:100vh}
+.app.show{display:block}
+.topbar{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:100}
+.topbar-inner{max-width:1000px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.topbar h1{font-size:17px;display:flex;align-items:center;gap:6px}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.user-badge{font-size:12px;color:var(--ink-soft);background:var(--bg);padding:5px 10px;border-radius:999px}
+.sync-status{font-size:11px;padding:3px 8px;border-radius:999px;transition:all .2s}
+.sync-status.idle{color:var(--ink-light)}
+.sync-status.syncing{background:#fef3c7;color:var(--amber)}
+.sync-status.ok{background:#d1fae5;color:var(--green)}
+.sync-status.err{background:#fee2e2;color:var(--red)}
+.container{max-width:1000px;margin:0 auto;padding:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+.card h2{font-size:15px;margin-bottom:12px;display:flex;align-items:center;gap:6px;justify-content:space-between}
+.card h2 .left{display:flex;align-items:center;gap:6px}
+
+/* 待办 */
+.todo-input-row{display:flex;gap:6px;margin-bottom:10px}
+.todo-input-row input{flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:7px;outline:none}
+.todo-input-row input:focus{border-color:var(--blue)}
+.todo-input-row button{width:auto;padding:8px 14px;background:var(--blue);color:#fff;border-radius:7px;font-size:13px}
+.todo-input-row button:hover{background:var(--blue-dark)}
+.todo-list{list-style:none}
+.todo-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.todo-item:last-child{border-bottom:none}
+.todo-item input[type=checkbox]{width:17px;height:17px;cursor:pointer;accent-color:var(--blue)}
+.todo-item span{flex:1;font-size:13px}
+.todo-item.done span{text-decoration:line-through;color:var(--ink-light)}
+.todo-item .del{font-size:16px;color:var(--ink-light);padding:0 4px}
+.todo-item .del:hover{color:var(--red)}
+.todo-empty{color:var(--ink-light);font-size:12px;text-align:center;padding:14px 0}
+
+/* 笔记 */
+.note-area{width:100%;min-height:140px;padding:10px;border:1px solid var(--line);border-radius:8px;resize:vertical;outline:none;font-size:13px;line-height:1.6}
+.note-area:focus{border-color:var(--blue)}
+.note-meta{font-size:11px;color:var(--ink-light);margin-top:6px;text-align:right}
+
+/* 计数卡 */
+.stat-row{display:flex;gap:10px;margin-bottom:16px}
+.stat{flex:1;background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);border-radius:10px;padding:12px;text-align:center}
+.stat .num{font-size:24px;font-weight:700;color:var(--blue-dark)}
+.stat .lbl{font-size:11px;color:var(--ink-soft);margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- ====== 登录/注册页 ====== -->
+<div id="authPage" class="auth-wrap">
+  <div class="auth-card">
+    <h1>🚀 个人工作台</h1>
+    <p class="sub">登录后数据自动云端同步，换设备不丢失</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabLogin" onclick="switchAuth('login')">登录</button>
+      <button class="auth-tab" id="tabSignup" onclick="switchAuth('signup')">注册</button>
+    </div>
+    <div class="auth-field">
+      <label>邮箱</label>
+      <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email">
+    </div>
+    <div class="auth-field">
+      <label>密码（至少 6 位）</label>
+      <input type="password" id="passwordInput" placeholder="••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" id="authBtn" onclick="doAuth()">登录</button>
+    <div class="auth-msg" id="authMsg"></div>
+    <p style="font-size:11px;color:var(--ink-light);margin-top:16px;text-align:center">
+      🔒 数据加密存储，仅你自己可见
+    </p>
+  </div>
+</div>
+
+<!-- ====== 主工作台 ====== -->
+<div id="appPage" class="app">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <h1>🚀 个人工作台</h1>
+      <div class="topbar-right">
+        <span class="sync-status idle" id="syncStatus">● 待同步</span>
+        <span class="user-badge" id="userBadge"></span>
+        <button class="btn-ghost btn" onclick="doLogout()" style="width:auto;padding:6px 12px;font-size:12px">退出</button>
+      </div>
+    </div>
+  </div>
+  <div class="container">
+    <div class="stat-row">
+      <div class="stat"><div class="num" id="statTotal">0</div><div class="lbl">总任务</div></div>
+      <div class="stat"><div class="num" id="statDone">0</div><div class="lbl">已完成</div></div>
+      <div class="stat"><div class="num" id="statNote">0</div><div class="lbl">笔记字数</div></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2><span class="left">📋 今日待办</span></h2>
+        <div class="todo-input-row">
+          <input type="text" id="todoInput" placeholder="加一个任务..." onkeydown="if(event.key==='Enter')addTodo()">
+          <button onclick="addTodo()">添加</button>
+        </div>
+        <ul class="todo-list" id="todoList"></ul>
+      </div>
+      <div class="card">
+        <h2><span class="left">📝 快速笔记</span></h2>
+        <textarea class="note-area" id="noteArea" placeholder="随手记点什么... 自动保存到云端" oninput="scheduleNoteSave()"></textarea>
+        <div class="note-meta" id="noteMeta">尚未保存</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Supabase SDK ====== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ✅ 已填入你的 Supabase 项目密钥
+const SUPABASE_URL = 'https://immerechgyizlgmrvtzd.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltbWVyZWNoZ3lpemxnbXJ2dHpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMTIwMDIsImV4cCI6MjEwMTY4ODAwMn0.Mx6YpDxggqQWJr4JnTu0IMlUb7LEvFDPOvybPzKwj50';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// 本地数据（离线也能用）
+let localData = { todos: [], note: '' };
+let noteSaveTimer = null;
+let isSyncing = false;
+
+// ====== 登录/注册切换 ======
+function switchAuth(mode){
+  document.getElementById('tabLogin').classList.toggle('active', mode==='login');
+  document.getElementById('tabSignup').classList.toggle('active', mode==='signup');
+  document.getElementById('authBtn').textContent = mode==='login' ? '登录' : '注册';
+  document.getElementById('authMsg').className = 'auth-msg';
+  document.getElementById('authMsg').textContent = '';
+}
+window.switchAuth = switchAuth;
+
+// ====== 执行登录或注册 ======
+async function doAuth(){
+  const email = document.getElementById('emailInput').value.trim();
+  const password = document.getElementById('passwordInput').value;
+  const isSignup = document.getElementById('tabSignup').classList.contains('active');
+  const msgEl = document.getElementById('authMsg');
+  const btn = document.getElementById('authBtn');
+
+  if(!email || !password){
+    showAuthMsg('请填邮箱和密码', 'error');
+    return;
+  }
+  if(password.length < 6){
+    showAuthMsg('密码至少 6 位', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '处理中...';
+
+  try{
+    let result;
+    if(isSignup){
+      result = await sb.auth.signUp({ email, password });
+      if(result.data.user && !result.data.session){
+        showAuthMsg('注册成功！请点「登录」用刚才的账号登录', 'success');
+      }
+    }else{
+      result = await sb.auth.signInWithPassword({ email, password });
+      if(result.error) throw result.error;
+      showAuthMsg('登录成功，正在加载...', 'success');
+      setTimeout(()=>location.reload(), 600);
+    }
+    if(result.error) throw result.error;
+  }catch(e){
+    showAuthMsg('出错：' + (e.message || '未知错误'), 'error');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = isSignup ? '注册' : '登录';
+  }
+}
+window.doAuth = doAuth;
+
+function showAuthMsg(text, type){
+  const el = document.getElementById('authMsg');
+  el.textContent = text;
+  el.className = 'auth-msg ' + type;
+}
+
+// ====== 退出登录 ======
+async function doLogout(){
+  await sb.auth.signOut();
+  location.reload();
+}
+window.doLogout = doLogout;
+
+// ====== 同步状态显示 ======
+function setSync(status, text){
+  const el = document.getElementById('syncStatus');
+  el.className = 'sync-status ' + status;
+  el.textContent = text;
+}
+
+// ====== 从云端拉数据 ======
+async function pullData(){
+  setSync('syncing', '● 同步中...');
+  try{
+    const { data, error } = await sb
+      .from('workbench_data')
+      .select('data')
+      .eq('user_id', sb.auth.getUser().data.user.id)
+      .maybeSingle();
+
+    if(error) throw error;
+
+    if(data && data.data){
+      // 云端有数据 → 用云端的
+      localData = data.data;
+    }else{
+      // 云端没数据 → 推送本地数据上去（首次登录）
+      await pushData();
+    }
+    renderAll();
+    setSync('ok', '● 已同步');
+  }catch(e){
+    console.error('拉取失败', e);
+    setSync('err', '● 同步失败');
+  }
+}
+
+// ====== 推送数据到云端 ======
+async function pushData(){
+  if(isSyncing) return;
+  isSyncing = true;
+  setSync('syncing', '● 保存中...');
+  try{
+    const userId = sb.auth.getUser().data.user.id;
+    const { error } = await sb
+      .from('workbench_data')
+      .upsert({
+        user_id: userId,
+        data: localData,
+        updated_at: new Date().toISOString()
+      });
+    if(error) throw error;
+    setSync('ok', '● 已同步');
+  }catch(e){
+    console.error('推送失败', e);
+    setSync('err', '● 保存失败');
+  }finally{
+    isSyncing = false;
+  }
+}
+
+// ====== 渲染界面 ======
+function renderAll(){
+  renderTodos();
+  document.getElementById('noteArea').value = localData.note || '';
+  updateStats();
+}
+
+function updateStats(){
+  const total = localData.todos.length;
+  const done = localData.todos.filter(t=>t.done).length;
+  const noteLen = (localData.note || '').length;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statNote').textContent = noteLen;
+}
+
+// ====== 待办相关 ======
+function renderTodos(){
+  const list = document.getElementById('todoList');
+  if(localData.todos.length === 0){
+    list.innerHTML = '<div class="todo-empty">暂无任务，添加一个吧</div>';
+    return;
+  }
+  list.innerHTML = localData.todos.map((t,i)=>`
+    <li class="todo-item ${t.done?'done':''}">
+      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo(${i})">
+      <span>${escapeHtml(t.text)}</span>
+      <button class="del" onclick="delTodo(${i})">×</button>
+    </li>
+  `).join('');
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function addTodo(){
+  const input = document.getElementById('todoInput');
+  const text = input.value.trim();
+  if(!text) return;
+  localData.todos.push({ text, done: false });
+  input.value = '';
+  renderTodos();
+  updateStats();
+  pushData();
+}
+window.addTodo = addTodo;
+
+function toggleTodo(i){
+  localData.todos[i].done = !localData.todos[i].done;
+  renderTodos();
+  updateStats();
+  pushData();
+}
+window.toggleTodo = toggleTodo;
+
+function delTodo(i){
+  localData.todos.splice(i, 1);
+  renderTodos();
+  updateStats();
+  pushData();
+}
+window.delTodo = delTodo;
+
+// ====== 笔记自动保存（防抖：停止输入 1 秒后保存） ======
+function scheduleNoteSave(){
+  localData.note = document.getElementById('noteArea').value;
+  document.getElementById('noteMeta').textContent = '编辑中...';
+  updateStats();
+  if(noteSaveTimer) clearTimeout(noteSaveTimer);
+  noteSaveTimer = setTimeout(()=>{
+    pushData();
+    document.getElementById('noteMeta').textContent = '已保存 · ' + new Date().toLocaleTimeString();
+  }, 1000);
+}
+window.scheduleNoteSave = scheduleNoteSave;
+
+// ====== 启动：检查登录状态 ======
+async function init(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(session){
+    // 已登录 → 显示工作台
+    document.getElementById('authPage').style.display = 'none';
+    document.getElementById('appPage').classList.add('show');
+    const userEmail = session.user.email;
+    document.getElementById('userBadge').textContent = '👤 ' + userEmail;
+    await pullData();
+  }else{
+    // 未登录 → 显示登录页
+    document.getElementById('authPage').style.display = 'flex';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
