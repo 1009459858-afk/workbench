@@ -744,6 +744,7 @@ function openCustomerDetail(id){const c=getCustomer(id);if(!c)return;
     <div class="detail-sec"><h4>🥕 会员信息</h4><div class="kv">
     <dt>等级</dt><dd>${levelBadge(calcLevel(c.totalSpent))}</dd><dt>累计消费</dt><dd>${fmtMoney(c.totalSpent)}🥕</dd>
     <dt>预存余额</dt><dd>${fmtMoney(c.balance)}🥕</dd><dt>累计返🥕</dt><dd>${fmtMoney(c.totalCarrot)}🥕</dd>
+    <dt>返🥕进度</dt><dd>${Number(c.carrotProgress)||0}/100🥕</dd>
     <dt>已修图</dt><dd>${c.editedCount||0} 张</dd></div></div>
     <div class="detail-sec"><h4>📅 约图记录</h4><div class="kv"><dt>首次约图</dt><dd>${fmtDate(c.firstOrderDate)}</dd><dt>最近约图</dt><dd>${fmtDate(c.lastOrderDate)}</dd></div>
     <div style="margin:8px 0"><strong style="font-size:12px;color:var(--ink-light)">喜欢风格：</strong>${(c.styles||[]).length?(c.styles||[]).map(s=>`<span class="tag-pill" style="margin:2px">${esc(s)}</span>`).join(''):'<span class="cell-sub">无</span>'}</div>
@@ -836,7 +837,7 @@ function renderOrders(){
       <td><div class="cell-main">${esc(c?custName(c):'未知')}</div><div class="cell-sub">${c?esc(c.id):''}</div></td>
       <td class="cell-sub">${fmtDate(o.orderTime)}</td>
       <td class="cell-sub">${o.deadline?fmtDateTime(o.deadline):'—'}${o.isUrgent?'<br><span class="badge b-urgent">加急</span>':''}</td>
-      <td>${fmtMoney(o.amount)}🥕${o.payment?`<div class="cell-sub">${payBadge(o.payment)}</div>`:''}</td>
+      <td>${fmtMoney(o.amount)}🥕${o.payType==='full'?'<span class="badge" style="background:#dcfce7;color:#16a34a;margin-left:4px">全款</span>':''}${o.payment?`<div class="cell-sub">${payBadge(o.payment)}</div>`:''}</td>
       <td>${o.imageCount||0}</td>
       <td>${o.payment?payBadge(o.payment):'—'}</td>
       <td>${statusBadge(o.status)}</td>
@@ -858,7 +859,8 @@ function applyOrdPlan(i){if(!DB.ordPlans||!DB.ordPlans[i])return;applyOrdFilterS
 function deleteOrdPlan(i){DB.ordPlans.splice(i,1);save();renderOrdSavedPlans();toast('已删除','ok');}
 function openOrderForm(id,presetDate){
   const o=id?DB.orders.find(x=>x.id===id):null;const isNew=!o;
-  const data=o||{orderTime:presetDate||todayStr(),startTime:(presetDate||todayStr())+'T09:00',status:'待制作',isUrgent:false,imageCount:0,amount:0,deposit:0,finalPay:0};
+  const data=o||{orderTime:presetDate||todayStr(),startTime:(presetDate||todayStr())+'T09:00',status:'待制作',isUrgent:false,imageCount:0,amount:0,deposit:0,finalPay:0,payType:'full'};
+  if(o&&!o.payType)data.payType='deposit';/* 旧订单兼容：默认定金模式 */
   if(DB.customers.length===0){toast('请先创建客户','err');return;}
   const selCust=data.customerId||'';
   const cust=selCust?getCustomer(selCust):null;
@@ -868,21 +870,36 @@ function openOrderForm(id,presetDate){
     <div class="form-grid-2"><div class="form-row"><label>下单时间</label><input type="date" name="orderTime" value="${data.orderTime||''}"></div>
     <div class="form-row"><label>开始制作时间</label><input type="datetime-local" name="startTime" value="${data.startTime||nowDT()}" oninput="updateDeadline(this)"></div></div>
     <div class="form-row"><label>截止时间 <span class="opt">自动计算·工作时长12h</span></label><input type="datetime-local" name="deadline" value="${data.deadline||''}" readonly style="background:var(--bg)"></div>
+    <div class="form-row"><label>付款方式</label><div style="display:flex;gap:16px;padding:8px 0">
+      <label class="toggle"><input type="radio" name="payType" value="full" onchange="onPayTypeChange()" ${data.payType!=='deposit'?'checked':''}> 💰 全款</label>
+      <label class="toggle"><input type="radio" name="payType" value="deposit" onchange="onPayTypeChange()" ${data.payType==='deposit'?'checked':''}> 🧧 定金+尾款</label>
+    </div></div>
     <div class="form-grid-2"><div class="form-row"><label>金额 🥕</label><input type="number" name="amount" value="${data.amount||0}" oninput="onAmountChange()"></div>
     <div class="form-row"><label>图片数量</label><input type="number" name="imageCount" value="${data.imageCount||0}"></div></div>
-    <div class="form-grid-2"><div class="form-row"><label>定金 <span class="opt">自动50%</span></label><input type="number" name="deposit" value="${data.deposit||0}" readonly style="background:var(--bg)"></div>
+    <div class="form-grid-2" id="depRow"><div class="form-row"><label>定金 <span class="opt">自动50%</span></label><input type="number" name="deposit" value="${data.deposit||0}" readonly style="background:var(--bg)"></div>
     <div class="form-row"><label>尾款 <span class="opt">自动50%</span></label><input type="number" name="finalPay" value="${data.finalPay||0}" readonly style="background:var(--bg)"></div></div>
     <div class="form-row"><label>支付明细</label><div id="payDetail" class="pay-detail"></div></div>
     <div class="form-grid-2"><div class="form-row"><label>状态</label><select name="status" onchange="onOrderStatusChange()">${ORDER_STATUS.map(s=>`<option ${data.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
     <div class="form-row"><label>加急</label><label class="toggle"><input type="checkbox" name="isUrgent" ${data.isUrgent?'checked':''}> 标记为加急</label></div></div>
-    <div class="hint">💡 预存支付部分不重复计算会员等级/返🥕；现金部分完成后自动计入累计消费并返🥕</div>
+    <div class="hint">💡 全款订单一次付清；定金订单先付50%定金，交付后收尾款。返🥕按累计消费进度结算，每满100🥕自动返还</div>
   </form>`;
   const foot=`${id?`<button class="btn btn-danger" onclick="deleteOrder('${id}')">删除</button>`:''}<button class="btn btn-ghost" onclick="closeDrawer()">取消</button><button class="btn btn-primary" onclick="saveOrder('${id||''}')">${isNew?'创建':'保存'}</button>`;
   openDrawer(isNew?'＋ 新建订单':`✏️ 编辑订单 · ${o.id}`,body,foot);
-  setTimeout(()=>{onAmountChange();},50);
+  setTimeout(()=>{onPayTypeChange();},50);
 }
 function onOrderCustChange(){onAmountChange();}
-function onAmountChange(){const f=$('ordForm');const amt=Number(f.amount.value)||0;f.deposit.value=Math.round(amt*0.5);f.finalPay.value=amt-Math.round(amt*0.5);const custId=f.customerId.value;const c=getCustomer(custId);const bal=c?c.balance:0;const pay=calcPayment(amt,bal);updatePayDetail(pay);if(f.startTime.value)updateDeadline(f.startTime);}
+function getPayType(){const f=$('ordForm');if(!f)return 'full';const r=f.querySelector('input[name="payType"]:checked');return r?r.value:'full';}
+function onPayTypeChange(){
+  const f=$('ordForm');if(!f)return;
+  const isFull=getPayType()==='full';
+  const depRow=$('depRow');
+  if(depRow)depRow.style.display=isFull?'none':'';
+  onAmountChange();
+}
+function onAmountChange(){const f=$('ordForm');const amt=Number(f.amount.value)||0;
+  if(getPayType()==='full'){f.deposit.value=amt;f.finalPay.value=0;}
+  else{f.deposit.value=Math.round(amt*0.5);f.finalPay.value=amt-Math.round(amt*0.5);}
+  const custId=f.customerId.value;const c=getCustomer(custId);const bal=c?c.balance:0;const pay=calcPayment(amt,bal);updatePayDetail(pay);if(f.startTime.value)updateDeadline(f.startTime);}
 function updatePayDetail(pay){const box=$('payDetail');if(!box)return;box.innerHTML=`<div class="pay-row"><span>订单金额</span><b>${fmtMoney(pay.balancePay+pay.cashPay)}🥕</b></div><div class="pay-row"><span>余额支付</span><b style="color:#9333ea">${fmtMoney(pay.balancePay)}🥕</b></div><div class="pay-row"><span>现金支付</span><b style="color:#16a34a">${fmtMoney(pay.cashPay)}🥕</b></div><div class="pay-row total"><span>支付方式</span><b>${pay.method==='balance'?'全额预存':pay.method==='cash'?'全额现金':'混合支付'}</b></div>`;}
 function updateDeadline(input){const f=input.closest('form');if(!f.startTime)return;const start=f.startTime.value;const dl=calcDeadline(start,12);f.deadline.value=dl;}
 function onOrderStatusChange(){/*占位，实际在saveOrder处理*/}
@@ -891,7 +908,7 @@ function saveOrder(id){
   const c=getCustomer(custId);
   const amt=Number(f.amount.value)||0;
   const pay=calcPayment(amt,c?c.balance:0);
-  const data={customerId:custId,orderTime:f.orderTime.value,startTime:f.startTime.value,deadline:f.deadline.value||calcDeadline(f.startTime.value,12),amount:amt,imageCount:Number(f.imageCount.value)||0,deposit:Number(f.deposit.value)||0,finalPay:Number(f.finalPay.value)||0,payment:pay,status:f.status.value,isUrgent:f.isUrgent.checked};
+  const data={customerId:custId,orderTime:f.orderTime.value,startTime:f.startTime.value,deadline:f.deadline.value||calcDeadline(f.startTime.value,12),amount:amt,imageCount:Number(f.imageCount.value)||0,deposit:Number(f.deposit.value)||0,finalPay:Number(f.finalPay.value)||0,payType:getPayType(),payment:pay,status:f.status.value,isUrgent:f.isUrgent.checked};
   if(!data.orderTime){toast('请选择下单时间','err');return;}
   let result=null;
   if(id){const idx=DB.orders.findIndex(o=>o.id===id);if(idx>=0){const old=DB.orders[idx];data.createdAt=old.createdAt;
@@ -925,29 +942,35 @@ function saveOrder(id){
     toast('已保存','ok');
   }
 }
-/* 订单完成结算：扣余额、现金部分计入累计消费、返🥕 */
+/* 订单完成结算：扣余额、现金部分计入累计消费、按累计消费进度返🥕 */
 function completeOrder(oldOrder,newData){
   const c=getCustomer(newData.customerId);if(!c)return null;
   const pay=newData.payment||calcPayment(newData.amount,c.balance);
   let balanceChanged=false;
   // 扣除余额支付部分
   if(pay.balancePay>0){c.balance=Math.max(0,(Number(c.balance)||0)-pay.balancePay);balanceChanged=true;}
-  // 现金部分计入累计消费，并返🥕
+  // 现金部分计入累计消费（预存部分在预存时已计入，不重复算会员成长）
   const cashPay=pay.cashPay||0;
   const oldLevel=calcLevel(c.totalSpent);
-  let carrotReturn=0;
-  if(cashPay>0){
-    c.totalSpent=(Number(c.totalSpent)||0)+cashPay;
-    const newLevel=calcLevel(c.totalSpent);
-    // 按新等级返🥕（升级后用新等级比例）
-    const rate=CARROT_RATE[newLevel]||0;
-    carrotReturn=Math.round(cashPay*rate);
-    if(carrotReturn>0){c.totalCarrot=(Number(c.totalCarrot)||0)+carrotReturn;c.balance=(Number(c.balance)||0)+carrotReturn;balanceChanged=true;}
-  }
+  if(cashPay>0){c.totalSpent=(Number(c.totalSpent)||0)+cashPay;balanceChanged=true;}
   c.editedCount=(Number(c.editedCount)||0)+(Number(newData.imageCount)||0);
   const newLevel=calcLevel(c.totalSpent);
   const upgraded=newLevel && newLevel!==oldLevel;
-  // 判断是否有任何权益触发
+  // ===== 返🥕：按订单全额累计进度，每满100返一次，零头结转 =====
+  const amt=Number(newData.amount)||0;
+  const beforeProgress=Number(c.carrotProgress)||0;
+  const rate=CARROT_RATE[newLevel]||0;
+  const totalProgress=beforeProgress+amt;
+  const returnTimes=Math.floor(totalProgress/100);
+  const carrotReturn=returnTimes>0?Math.round(100*rate*returnTimes):0;
+  c.carrotProgress=totalProgress%100;
+  if(carrotReturn>0){
+    c.totalCarrot=(Number(c.totalCarrot)||0)+carrotReturn;
+    c.balance=(Number(c.balance)||0)+carrotReturn;
+    balanceChanged=true;
+  }
+  // 结算快照存入订单，取消完成时回退用
+  newData.carrotSettle={beforeProgress,carrotReturn,afterProgress:c.carrotProgress};
   const hasBenefit=carrotReturn>0||upgraded||balanceChanged;
   const text=buildOrderCompleteText(c,newData,pay,carrotReturn,upgraded,oldLevel,newLevel);
   return {text,upgraded,oldLevel,newLevel,carrotReturn,hasBenefit,balanceChanged};
@@ -958,15 +981,25 @@ function uncompleteOrder(oldOrder,newData){
   const pay=oldOrder.payment||{balancePay:0,cashPay:oldOrder.amount||0};
   if(pay.balancePay>0){c.balance=(Number(c.balance)||0)+pay.balancePay;}
   const cashPay=pay.cashPay||0;
-  if(cashPay>0){c.totalSpent=Math.max(0,(Number(c.totalSpent)||0)-cashPay);
-    // 回退返🥕
-    const oldLevel=calcLevel(c.totalSpent+cashPay);
-    const rate=CARROT_RATE[oldLevel]||0;
-    const carrotReturn=Math.round(cashPay*rate);
-    c.totalCarrot=Math.max(0,(Number(c.totalCarrot)||0)-carrotReturn);
-    c.balance=Math.max(0,(Number(c.balance)||0)-carrotReturn);
-  }
+  if(cashPay>0){c.totalSpent=Math.max(0,(Number(c.totalSpent)||0)-cashPay);}
   c.editedCount=Math.max(0,(Number(c.editedCount)||0)-(Number(newData.imageCount)||0));
+  // 回退返🥕进度与返额（用订单里存的结算快照）
+  const settle=(newData&&newData.carrotSettle)||(oldOrder&&oldOrder.carrotSettle);
+  if(settle){
+    c.carrotProgress=settle.beforeProgress||0;
+    if(settle.carrotReturn>0){
+      c.totalCarrot=Math.max(0,(Number(c.totalCarrot)||0)-settle.carrotReturn);
+      c.balance=Math.max(0,(Number(c.balance)||0)-settle.carrotReturn);
+    }
+  }else{
+    // 兼容旧机制完成的订单：按旧算法近似回退
+    const lvl=calcLevel((Number(c.totalSpent)||0)+cashPay);
+    const rate=CARROT_RATE[lvl]||0;
+    const back=Math.round(cashPay*rate);
+    if(back>0){c.totalCarrot=Math.max(0,(Number(c.totalCarrot)||0)-back);c.balance=Math.max(0,(Number(c.balance)||0)-back);}
+  }
+  if(newData&&newData.carrotSettle)delete newData.carrotSettle;
+  if(oldOrder&&oldOrder!==newData&&oldOrder.carrotSettle)delete oldOrder.carrotSettle;
 }
 function deleteOrder(id){confirmAct(`删除订单 ${id}？关联排单也会删除。`,()=>{const o=DB.orders.find(x=>x.id===id);if(o&&o.status==='已完成'){uncompleteOrder(o,o);}DB.orders=DB.orders.filter(x=>x.id!==id);DB.schedules=DB.schedules.filter(s=>s.orderId!==id);save();closeDrawer();renderOrders();renderDashboard();toast('已删除','ok');});}
 
@@ -1219,7 +1252,7 @@ function buildDeliverText(c,order){
   const title=custTitle(c);
   let t=`📦 ${title}，照片修好啦 ˶>ᗜ<˶\n\n`;
   t+=`这次一共修了 ${order.imageCount||0} 张照片♡\n\n`;
-  if(Number(order.finalPay)>0){
+  if(order.payType!=='full' && Number(order.finalPay)>0){
     t+=`🥕 还需要支付尾款：${fmtMoney(order.finalPay)}🥕\n\n`;
     t+=`付完尾款后就可以把原图全部发给${title}啦♡\n\n`;
   }
@@ -1249,9 +1282,9 @@ function showNoBenefitAlert(c,order,pay){
       <div style="font-size:13px;color:var(--ink-soft)">订单金额：${fmtMoney(order.amount)}🥕 · ${payBadge(pay)}</div>
     </div>
     <div style="padding:12px;background:#fef3c7;border-radius:8px;color:#92400e;font-size:13px">
-      ⚠️ 本订单未触发任何会员权益<br>
+      ⚠️ 本订单未触发会员权益<br>
       无返🥕、无余额变化、无会员升级<br><br>
-      <span style="color:var(--ink-light)">原因：本订单使用预存余额支付，该金额在预存时已完成会员成长与返利计算，不重复计算。</span>
+      <span style="color:var(--ink-light)">说明：返🥕按消费累计进度结算，本单 ${fmtMoney(order.amount)}🥕 已计入进度（当前 ${Number(c&&c.carrotProgress)||0}/100🥕），每累计满 100🥕 自动返还一次，零头不会作废。</span>
     </div>
   </div>`;
   $('copyModal').classList.add('show');
@@ -1324,7 +1357,11 @@ function buildOrderCreateText(c,order,pay){
   let t=`🐰 ${title}，已经收到你的订单啦 ˶>ᗜ<˶\n\n`;
   t+=`📷 修图数量：${order.imageCount||0} 张\n`;
   t+=`💰 订单金额：${fmtMoney(order.amount)}🥕\n`;
-  t+=`🥕 已支付定金：${fmtMoney(order.deposit||0)}🥕\n`;
+  if(order.payType!=='full'){
+    t+=`🥕 已支付定金：${fmtMoney(order.deposit||0)}🥕\n`;
+  }else{
+    t+=`✅ 已支付全款：${fmtMoney(order.deposit||order.amount||0)}🥕\n`;
+  }
   t+='\n兔子会尽快安排制作，预计完成时间：'+(order.deadline?fmtDateTime(order.deadline):'待定')+'\n\n';
   t+=`完成后会第一时间通知${title}♡\n\n谢谢${title}的支持 ᵗ>ᴗ<ᵗ`;
   return t;
@@ -1332,10 +1369,13 @@ function buildOrderCreateText(c,order,pay){
 function buildOrderCompleteText(c,order,pay,carrotReturn,upgraded,oldLevel,newLevel){
   const title=custTitle(c);
   let t=`🎉 ${title}，这次订单已经完成啦 ˶>ᗜ<˶\n\n感谢${title}一直来的支持♡\n\n`;
-  // 尾款
-  if(Number(order.finalPay)>0){t+=`🥕 尾款：${fmtMoney(order.finalPay)}🥕\n\n`;}
-  // 返🥕（仅现金部分有返）
-  if(carrotReturn>0){t+=`🥕 本次返还：${carrotReturn}🥕\n已加入${title}的预存余额～\n\n`;}
+  // 尾款（仅定金订单显示）
+  if(order.payType!=='full' && Number(order.finalPay)>0){t+=`🥕 尾款：${fmtMoney(order.finalPay)}🥕\n\n`;}
+  // 返🥕（累计消费每满100返还，零头继续累计）
+  if(carrotReturn>0){t+=`🥕 累计消费返利：${carrotReturn}🥕\n已经加入${title}的预存余额啦🎁\n\n`;}
+  // 返🥕进度（让客户知道自己攒到哪了）
+  const prog=Number(c.carrotProgress)||0;
+  t+=`📈 返🥕进度：${prog}/100🥕（消费每累计满100🥕自动返一次）\n\n`;
   // 余额
   if(Number(c.balance)>0){t+=`🥕 当前预存余额：${fmtMoney(c.balance)}🥕\n\n`;}
   // 升级
